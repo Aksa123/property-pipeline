@@ -7,9 +7,12 @@ import csv
 import psycopg
 
 
-def get_hdb_listings() -> dict:
+def get_hdb_listings(offset: int | None = None) -> dict:
     """Mock request response. In practice, this will work with pagination i.e. with the offset query param"""
+    """Capped at 300"""
     path = BASE_PATH / 'data' / 'hdb_listings.json'
+    if offset:
+        path = BASE_PATH / 'data' / f'hdb_listings_offset_{offset}.json'
     with open(path, 'r') as f:
         res = json.loads(f.read())
     return res

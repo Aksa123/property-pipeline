@@ -1,6 +1,7 @@
 from peewee import PostgresqlDatabase, Model, AutoField, IntegerField, CharField, DateTimeField, TextField, \
-                ForeignKeyField, DecimalField, BigIntegerField, UUIDField
+                ForeignKeyField, DecimalField, BigIntegerField, UUIDField, DateField, EXCLUDED
 from settings import DB_STAGING_HOST, DB_STAGING_PORT, DB_STAGING_NAME, DB_STAGING_USER, DB_STAGING_PASSWORD
+from typing import Self
 from datetime import datetime, timedelta
 import json
 
@@ -61,12 +62,33 @@ class Streets(LowCardinalDimension):
 class FlatModels(LowCardinalDimension):
     pass
 
+
+# Raw
+class HDBListingsRaw(BaseModel):
+    ingestion_id = UUIDField()
+    batch_id = UUIDField()
+    _id = IntegerField()
+    month = CharField(max_length=7)
+    town = CharField(max_length=200)
+    flat_type = CharField(max_length=200)
+    block = CharField(max_length=200)
+    street_name = CharField(max_length=200)
+    storey_range = CharField(max_length=12)
+    floor_area_sqm = DecimalField(max_digits=10, decimal_places=2, auto_round=True)
+    flat_model = CharField(max_length=200)
+    lease_commence_date = IntegerField()    # Year
+    remaining_lease = CharField(max_length=50)
+    resale_price = DecimalField(max_digits=10, decimal_places=2, auto_round=True)
+    
+
 # Normalized
-class HDBListings(BaseModel):
-    month = DateTimeField(formats='%Y-%m')
+class HDBListingsNormalized(BaseModel):
+    ingestion_id = UUIDField()
+    _id = IntegerField()
+    month = CharField(7)
     town_id = ForeignKeyField(Towns, backref='listings')
     flat_type_id = ForeignKeyField(FlatTypes, backref='listings')
-    block = CharField(200),
+    block = CharField(200)
     street_id = ForeignKeyField(Streets, backref='listings')
     storey_range_from = IntegerField()
     storey_range_to = IntegerField()
@@ -76,30 +98,25 @@ class HDBListings(BaseModel):
     remaining_lease_year = IntegerField()
     remaining_lease_month = IntegerField()
     resale_price = DecimalField(max_digits=10, decimal_places=2, auto_round=True)
-    _id = IntegerField()
+    full_address = CharField(max_length=255, unique=True, primary_key=True)       # Identifier
+    _update_columns = {}
 
+    @classmethod
+    def upsert_many(cls, model_list: list[Self]):
+        if not cls._update_columns:
+            cols = cls._meta.columns
+            for c, v in cols.items():
+                cls._update_columns[c] = EXCLUDED.__getattr__(c)
 
-class HDBListingsRaw(BaseModel):
-    ingestion_id = UUIDField()
-    month = CharField(max_length=7)
-    town = CharField(max_length=200)
-    flat_type = CharField(max_length=200)
-    block = CharField(200)
-    street_name = CharField(max_length=200)
-    storey_range_from = IntegerField()
-    storey_range_to = IntegerField()
-    floor_area_sqm = DecimalField(max_digits=10, decimal_places=2, auto_round=True)
-    flat_model = CharField(max_length=200)
-    lease_commence_date = IntegerField()    # Year
-    remaining_lease_year = IntegerField()
-    remaining_lease_month = IntegerField()
-    resale_price = DecimalField(max_digits=10, decimal_places=2, auto_round=True)
-    
+        dict_list = [i.__dict__['__data__'] for i in model_list]
+        return cls.insert_many(dict_list).on_conflict(conflict_target=(cls.full_address,), update=cls._update_columns).execute()
+        # return cls.insert_many(model_list).on_conflict_replace()
 
-
-db_staging.create_tables([HDBListingsRaw, 
-                          HDBListings,
-                          Towns,
-                          FlatTypes,
-                          Streets,
-                          FlatModels])
+db_staging.create_tables([
+    Towns,
+    FlatTypes,
+    Streets,
+    FlatModels,
+    HDBListingsRaw, 
+    HDBListingsNormalized,
+])
