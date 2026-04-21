@@ -37,6 +37,7 @@ class BaseModel(Model):
         legacy_table_names = False
     
     id = AutoField()
+    created_at = DateTimeField(default=datetime.now)
 
 
 class LowCardinalDimension(BaseModel):
@@ -98,7 +99,7 @@ class HDBListingsNormalized(BaseModel):
     remaining_lease_year = IntegerField()
     remaining_lease_month = IntegerField()
     resale_price = DecimalField(max_digits=10, decimal_places=2, auto_round=True)
-    full_address = CharField(max_length=255, unique=True, primary_key=True)       # Identifier
+    full_address = CharField(max_length=255, unique=True )       # Identifier
     _update_columns = {}
 
     @classmethod

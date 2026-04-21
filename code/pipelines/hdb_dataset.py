@@ -13,27 +13,6 @@ from settings import QUERIES_PATH
 from connections import conn_staging
 
 
-@task
-def start():
-    ingestion_id = uuid.uuid4()
-
-    offset = None
-    while True:
-        response = extract_hdb_listings(offset)
-        data = response['result']['records']
-
-        raw_dump = load_raw_to_staging(ingestion_id, data)
-        batch_id = raw_dump['batch_id']
-        deduped = transform_deduplicate(ingestion_id, batch_id)
-        normalized = transform_normalize(deduped)
-        normalized_dump = load_normalized_to_staging(ingestion_id, normalized)
-
-        if 'next' in response['result']['_links']:
-            next_url = response['result']['_links']['next']
-            offset = int(parse_qs(urlparse(next_url).query)['offset'][0])
-        else:
-            break
-
 
 @task(retries=3, retry_delay_seconds=5)
 def extract_hdb_listings(offset: int | None = None) -> dict:    
@@ -82,6 +61,7 @@ def transform_deduplicate(ingestion_id: uuid.UUID, batch_id: uuid.UUID) -> list[
 @task(retries=3, retry_delay_seconds=5)
 def transform_normalize(data: list[dict]):
     output = []
+    # Create in-memory maps for the IDs. This is fine for low-cardninality tables
     towns = Towns.get_id_dict()
     flat_types = FlatTypes.get_id_dict()
     streets = Streets.get_id_dict()
@@ -167,9 +147,29 @@ def load_normalized_to_staging(ingestion_id: uuid.UUID, data: list[dict]):
     
     # Bulk insert is more efficient
     HDBListingsNormalized.upsert_many(batch)
-
     return {'success': True, 'ingestion_id': ingestion_id, 'row_count': len(data)}
 
+
+@task
+def start():
+    ingestion_id = uuid.uuid4()
+    offset = None
+    # Loop over for pagination
+    while True:
+        response = extract_hdb_listings(offset)
+        data = response['result']['records']
+
+        raw_dump = load_raw_to_staging(ingestion_id, data)
+        batch_id = raw_dump['batch_id']
+        deduped = transform_deduplicate(ingestion_id, batch_id)
+        normalized = transform_normalize(deduped)
+        normalized_dump = load_normalized_to_staging(ingestion_id, normalized)
+
+        if 'next' in response['result']['_links']:
+            next_url = response['result']['_links']['next']
+            offset = int(parse_qs(urlparse(next_url).query)['offset'][0])
+        else:
+            break
 
 
 @flow(name='hdb_dataset')
