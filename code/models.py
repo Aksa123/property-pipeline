@@ -58,7 +58,22 @@ class FlatTypes(LowCardinalDimension):
     pass
 
 class Streets(LowCardinalDimension):
-    pass
+    # Assuming Singapore has streets with the same names but from different towns
+    class Meta:
+        # Unique name-town combination
+        indexes = [(('name', 'town'), True)]
+
+    name = CharField(200)
+    town = ForeignKeyField(Towns, backref='streets')
+    
+    @classmethod
+    def get_id_dict(cls):
+        result = cls.select(cls.id, cls.name, cls.town)
+        mapp = {}
+        for i in result:
+            key = str(i.town) + '__' + i.name
+            mapp[key] = i.id
+        return mapp
 
 class FlatModels(LowCardinalDimension):
     pass
@@ -87,14 +102,14 @@ class HDBListingsNormalized(BaseModel):
     ingestion_id = UUIDField()
     _id = IntegerField()
     month = CharField(7)
-    town_id = ForeignKeyField(Towns, backref='listings')
-    flat_type_id = ForeignKeyField(FlatTypes, backref='listings')
+    town = ForeignKeyField(Towns, backref='listings')
+    flat_type = ForeignKeyField(FlatTypes, backref='listings')
     block = CharField(200)
-    street_id = ForeignKeyField(Streets, backref='listings')
+    street = ForeignKeyField(Streets, backref='listings')
     storey_range_from = IntegerField()
     storey_range_to = IntegerField()
     floor_area_sqm = DecimalField(max_digits=10, decimal_places=2, auto_round=True)
-    flat_model_id = ForeignKeyField(FlatModels, backref='listings')
+    flat_model = ForeignKeyField(FlatModels, backref='listings')
     lease_commence_date = IntegerField()    # Year
     remaining_lease_year = IntegerField()
     remaining_lease_month = IntegerField()
@@ -112,6 +127,16 @@ class HDBListingsNormalized(BaseModel):
         dict_list = [i.__dict__['__data__'] for i in model_list]
         return cls.insert_many(dict_list).on_conflict(conflict_target=(cls.full_address,), update=cls._update_columns).execute()
         # return cls.insert_many(model_list).on_conflict_replace()
+
+
+db_staging.drop_tables([
+    Towns,
+    FlatTypes,
+    Streets,
+    FlatModels,
+    HDBListingsRaw, 
+    HDBListingsNormalized,
+])
 
 db_staging.create_tables([
     Towns,

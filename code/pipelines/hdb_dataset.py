@@ -50,7 +50,7 @@ def load_raw_to_staging(ingestion_id: uuid.UUID, data: dict):
 
 @task
 def transform_deduplicate(ingestion_id: uuid.UUID, batch_id: uuid.UUID) -> list[dict]:
-    # Performed in staging side against raw data
+    # Performed in staging db side against raw data
     sql_name = 'hdb_listings_deduplicate.sql'
     with open(QUERIES_PATH / sql_name, 'r') as f:
         query = f.read()
@@ -83,7 +83,8 @@ def transform_normalize(data: list[dict]):
             town_id = towns[town_name]
         else:
             # New entry
-            town_id = Towns(name=town_name).save()
+            town_id = Towns(name=town_name)
+            town_id.save()
             towns[town_name] = town_id
         
         flat_type_name = i['flat_type']
@@ -94,11 +95,12 @@ def transform_normalize(data: list[dict]):
             flat_types[flat_type_name] = flat_type_id
 
         street_name = i['street_name']
-        if street_name in streets:
-            street_id = streets[street_name]
+        street_key = str(town_id) + '__' + street_name
+        if street_key in streets:
+            street_id = streets[street_key]
         else:
-            street_id = Streets(name=street_name).save()
-            streets[street_name] = street_id
+            street_id = Streets(name=street_name, town=town_id).save()
+            streets[street_key] = street_id
 
         flat_model_name = i['flat_model']
         if flat_model_name in flat_models:
@@ -111,10 +113,10 @@ def transform_normalize(data: list[dict]):
         i['storey_range_to'] = storey_to
         i['remaining_lease_year'] = remaining_lease_year
         i['remaining_lease_month'] = remaining_lease_month
-        i['town_id'] = town_id
-        i['flat_type_id'] = flat_type_id
-        i['street_id'] = street_id
-        i['flat_model_id'] = flat_model_id
+        i['town'] = town_id
+        i['flat_type'] = flat_type_id
+        i['street'] = street_id
+        i['flat_model'] = flat_model_id
 
         output.append(i)
     
@@ -129,14 +131,14 @@ def load_normalized_to_staging(ingestion_id: uuid.UUID, data: list[dict]):
                 ingestion_id=ingestion_id,
                 _id=i['_id'],
                 month=i['month'],
-                town_id=i['town_id'],
-                flat_type_id=i['flat_type_id'],
+                town=i['town'],
+                flat_type=i['flat_type'],
                 block=i['block'],
-                street_id=i['street_id'],
+                street=i['street'],
                 storey_range_from=i['storey_range_from'],
                 storey_range_to=i['storey_range_to'],
                 floor_area_sqm=Decimal(i['floor_area_sqm']),
-                flat_model_id=i['flat_model_id'],
+                flat_model=i['flat_model'],
                 lease_commence_date=i['lease_commence_date'],
                 remaining_lease_year=i['remaining_lease_year'],
                 remaining_lease_month=i['remaining_lease_month'],

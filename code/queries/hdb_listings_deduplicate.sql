@@ -10,12 +10,13 @@ addr as (
 ordered as (
 	select 
 		*, 
-		rank() over (partition by full_addr order by month desc, id desc) as rankz
+		row_number() over (partition by full_addr order by month desc, id desc) as rankz
 	from addr
 )
 select * 
 from ordered 
 where 
 	rankz = 1 
+	and resale_price > 0	-- sanity check
 	and ingestion_id = %s
 	and batch_id = %s
