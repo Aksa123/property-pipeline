@@ -1,5 +1,5 @@
 from loggers import logger
-from settings import BASE_PATH
+from settings import BASE_PATH, DATA_PATH
 import polars as pl
 import requests
 import json
@@ -8,11 +8,10 @@ import psycopg
 
 
 def get_hdb_listings(offset: int | None = None) -> dict:
-    """Mock request response. In practice, this will work with pagination i.e. with the offset query param"""
-    """Capped at 300"""
-    path = BASE_PATH / 'data' / 'hdb_listings.json'
+    """Mock request response. In practice, this will work with pagination i.e. with the offset query param. Capped at 300"""
+    path = DATA_PATH / 'hdb_listings.json'
     if offset:
-        path = BASE_PATH / 'data' / f'hdb_listings_offset_{offset}.json'
+        path = DATA_PATH / f'hdb_listings_offset_{offset}.json'
     with open(path, 'r') as f:
         res = json.loads(f.read())
     return res
@@ -20,7 +19,7 @@ def get_hdb_listings(offset: int | None = None) -> dict:
 
 def get_full_hdb_listings_as_polar() -> pl.DataFrame:
     """Mock the full CSV response. Returned as Polars DataFrame"""
-    path = BASE_PATH / 'data' / 'hdb_2017_onwards__15-04-2026.csv'
+    path = DATA_PATH / 'hdb_2017_onwards__15-04-2026.csv'
     res = pl.read_csv(path, 
                       schema_overrides={
                         'floor_area_sqm': pl.Decimal(scale=2),
